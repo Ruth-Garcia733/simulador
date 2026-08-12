@@ -1,0 +1,863 @@
+<meta charset="UTF-8">
+<title>Torre de Control — Implementación WMS</title>
+<style>
+  :root{
+    color-scheme: light;
+    --bg:#f4f6f7; --page:#eef1f2;
+    --surface:#ffffff; --surface-2:#eef2f3; --surface-sunken:#e6ebec;
+    --text:#10161a; --text-2:#4b5a61; --muted:#7c8a90;
+    --border:rgba(16,22,26,0.11); --border-strong:rgba(16,22,26,0.18);
+    --accent:#1f8f88; --accent-ink:#0d3f3c; --accent-wash:#e2f2f0;
+    --good:#0ca30c; --warning:#b8790a; --critical:#d03b3b;
+    --good-wash:#e5f7e0; --warning-wash:#fdf1da; --critical-wash:#fbe4e2;
+    --shadow: 0 1px 2px rgba(16,22,26,.06), 0 4px 14px rgba(16,22,26,.05);
+    --font-display:"Bahnschrift", "Arial Narrow", "Segoe UI Semibold", sans-serif;
+    --font-body:"Segoe UI", system-ui, -apple-system, sans-serif;
+    --font-mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme: dark;
+      --bg:#12181b; --page:#0c1012;
+      --surface:#1a2226; --surface-2:#212b2f; --surface-sunken:#0f1517;
+      --text:#eef3f3; --text-2:#a9bcc2; --muted:#728086;
+      --border:rgba(255,255,255,0.09); --border-strong:rgba(255,255,255,0.16);
+      --accent:#3fc2b8; --accent-ink:#bdf0ea; --accent-wash:#173330;
+      --good:#22b522; --warning:#e2a530; --critical:#e2635f;
+      --good-wash:#123018; --warning-wash:#332510; --critical-wash:#331615;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --bg:#12181b; --page:#0c1012;
+    --surface:#1a2226; --surface-2:#212b2f; --surface-sunken:#0f1517;
+    --text:#eef3f3; --text-2:#a9bcc2; --muted:#728086;
+    --border:rgba(255,255,255,0.09); --border-strong:rgba(255,255,255,0.16);
+    --accent:#3fc2b8; --accent-ink:#bdf0ea; --accent-wash:#173330;
+    --good:#22b522; --warning:#e2a530; --critical:#e2635f;
+    --good-wash:#123018; --warning-wash:#332510; --critical-wash:#331615;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+  :root[data-theme="light"]{
+    color-scheme: light;
+    --bg:#f4f6f7; --page:#eef1f2;
+    --surface:#ffffff; --surface-2:#eef2f3; --surface-sunken:#e6ebec;
+    --text:#10161a; --text-2:#4b5a61; --muted:#7c8a90;
+    --border:rgba(16,22,26,0.11); --border-strong:rgba(16,22,26,0.18);
+    --accent:#1f8f88; --accent-ink:#0d3f3c; --accent-wash:#e2f2f0;
+    --good:#0ca30c; --warning:#b8790a; --critical:#d03b3b;
+    --good-wash:#e5f7e0; --warning-wash:#fdf1da; --critical-wash:#fbe4e2;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--page); color:var(--text); font-family:var(--font-body);
+    font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background:var(--accent); color:#fff; }
+  a{ color:var(--accent); }
+
+  .wrap{ max-width:1360px; margin:0 auto; padding:20px 24px 64px; }
+
+  h1,h2,h3{ font-family:var(--font-display); font-weight:700; text-wrap:balance; margin:0; color:var(--text); }
+  .eyebrow{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--muted); font-weight:600;
+  }
+  .num{ font-variant-numeric:tabular-nums; font-family:var(--font-mono); }
+
+  /* ---------- Header ---------- */
+  header.top{
+    display:flex; align-items:flex-end; justify-content:space-between; gap:24px;
+    padding:22px 0 16px; border-bottom:2px solid var(--border-strong); margin-bottom:20px;
+    flex-wrap:wrap;
+  }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand .mark{
+    width:38px; height:38px; border-radius:6px; background:var(--accent);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    color:#04211f; font-family:var(--font-display); font-weight:700; font-size:15px;
+  }
+  header.top h1{ font-size:26px; letter-spacing:.01em; }
+  header.top .sub{ color:var(--text-2); font-size:13px; margin-top:2px; }
+
+  /* ---------- Panels ---------- */
+  .panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    box-shadow:var(--shadow); margin-bottom:20px; overflow:hidden;
+  }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 18px; border-bottom:1px solid var(--border); flex-wrap:wrap;
+  }
+  .panel-head h2{ font-size:16px; letter-spacing:.01em; }
+  .panel-head .hint{ color:var(--muted); font-size:12px; max-width:520px; }
+  .panel-body{ padding:18px; }
+
+  /* ---------- Controls ---------- */
+  .controls{ display:flex; align-items:center; gap:22px; flex-wrap:wrap; padding:16px 18px; }
+  .ctl-group{ display:flex; flex-direction:column; gap:6px; }
+  .ctl-group .lbl{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .segmented{ display:inline-flex; background:var(--surface-2); border:1px solid var(--border); border-radius:7px; padding:2px; }
+  .segmented button{
+    border:none; background:transparent; color:var(--text-2); font:inherit; font-weight:600;
+    padding:6px 13px; border-radius:5px; cursor:pointer; font-size:12.5px;
+  }
+  .segmented button.active{ background:var(--accent); color:#04211f; }
+  .segmented button:not(.active):hover{ color:var(--text); }
+
+  .slider-ctl{ display:flex; align-items:center; gap:10px; min-width:230px; }
+  input[type=range]{ accent-color:var(--accent); width:150px; }
+  .slider-readout{
+    font-family:var(--font-mono); font-weight:700; font-size:15px; min-width:26px; text-align:center;
+    background:var(--accent-wash); color:var(--accent-ink); border-radius:5px; padding:3px 7px;
+  }
+
+  .btn{
+    font:inherit; font-weight:600; font-size:12.5px; padding:8px 14px; border-radius:7px;
+    border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text); cursor:pointer;
+  }
+  .btn:hover{ border-color:var(--accent); color:var(--accent-ink); }
+  .btn.primary{ background:var(--accent); border-color:var(--accent); color:#04211f; }
+  .btn.primary:hover{ filter:brightness(1.06); color:#04211f; }
+  .btn:focus-visible, .segmented button:focus-visible, input:focus-visible, select:focus-visible{
+    outline:2px solid var(--accent); outline-offset:1px;
+  }
+
+  /* ---------- KPI ribbon ---------- */
+  .kpis{ display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:var(--border); }
+  .kpi{ background:var(--surface); padding:14px 16px; display:flex; flex-direction:column; gap:4px; }
+  .kpi .lbl{ font-family:var(--font-mono); font-size:10px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+  .kpi .val{ font-family:var(--font-display); font-size:21px; font-weight:700; }
+  .kpi .sub{ font-size:11.5px; color:var(--text-2); }
+  .pill{
+    display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:99px;
+    font-size:11.5px; font-weight:700; width:fit-content;
+  }
+  .pill.good{ background:var(--good-wash); color:var(--good); }
+  .pill.warning{ background:var(--warning-wash); color:var(--warning); }
+  .pill.critical{ background:var(--critical-wash); color:var(--critical); }
+  .pill .dot{ width:7px; height:7px; border-radius:99px; background:currentColor; }
+
+  /* ---------- Gantt ---------- */
+  .gantt-scroll{ overflow-x:auto; }
+  .gantt{ min-width:820px; }
+  .gantt-axis{ display:flex; padding-left:158px; position:relative; height:22px; margin-bottom:4px; }
+  .gantt-axis .tick{
+    position:absolute; top:0; font-family:var(--font-mono); font-size:10.5px; color:var(--muted);
+    border-left:1px solid var(--border); padding-left:5px; height:100%;
+  }
+  .gantt-row{ display:flex; align-items:center; height:27px; position:relative; }
+  .gantt-row .rowlabel{
+    width:158px; flex-shrink:0; font-family:var(--font-mono); font-size:12px; color:var(--text-2);
+    display:flex; align-items:center; gap:6px; cursor:pointer;
+  }
+  .gantt-row .rowlabel:hover{ color:var(--text); }
+  .gantt-row .rowlabel.active{ color:var(--accent-ink); font-weight:700; }
+  .cluster-tag{
+    font-size:9.5px; font-family:var(--font-mono); padding:1px 5px; border-radius:4px;
+    background:var(--surface-2); color:var(--muted); border:1px solid var(--border);
+  }
+  .gantt-track{ flex:1; position:relative; height:100%; border-left:1px solid var(--border); }
+  .gantt-track .gridline{ position:absolute; top:0; bottom:0; border-left:1px solid var(--border); }
+  .gantt-track .limitline{ position:absolute; top:-2px; bottom:-2px; border-left:2px dashed var(--critical); z-index:3; }
+  .gantt-bar{
+    position:absolute; top:5px; height:17px; border-radius:3px; background:var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);
+  }
+  .gantt-bar.dim{ opacity:.35; }
+  .gantt-legend{ display:flex; gap:16px; align-items:center; margin-top:10px; font-size:11.5px; color:var(--text-2); flex-wrap:wrap; }
+  .gantt-legend .sw{ display:inline-block; width:12px; height:8px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+
+  /* ---------- Site drilldown ---------- */
+  .site-picker{ display:flex; flex-wrap:wrap; gap:6px; padding:14px 18px 0; }
+  .chip{
+    font-family:var(--font-mono); font-size:11.5px; font-weight:600; padding:5px 10px; border-radius:6px;
+    border:1px solid var(--border); background:var(--surface-2); color:var(--text-2); cursor:pointer;
+  }
+  .chip.active{ background:var(--accent); border-color:var(--accent); color:#04211f; }
+  .chip:hover:not(.active){ border-color:var(--accent); color:var(--text); }
+
+  .site-detail{ display:grid; grid-template-columns:230px 1fr; gap:22px; padding:18px; }
+  .site-info dl{ margin:0; display:grid; grid-template-columns:auto 1fr; gap:6px 10px; font-size:12.5px; }
+  .site-info dt{ color:var(--muted); }
+  .site-info dd{ margin:0; font-weight:600; }
+  .site-info h3{ font-size:14px; margin-bottom:10px; }
+  .site-cost-list{ margin-top:14px; border-top:1px solid var(--border); padding-top:12px; }
+  .site-cost-list .row{ display:flex; justify-content:space-between; font-size:12px; padding:3px 0; color:var(--text-2); }
+  .site-cost-list .row.total{ color:var(--text); font-weight:700; border-top:1px solid var(--border); margin-top:4px; padding-top:6px; }
+
+  /* ---------- Tables ---------- */
+  .table-scroll{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  thead th{
+    text-align:left; font-family:var(--font-mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--muted); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--border-strong); white-space:nowrap;
+  }
+  tbody td{ padding:7px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover td{ background:var(--surface-2); }
+  td.num, th.num{ text-align:right; font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+
+  .input-num{
+    width:64px; font:inherit; font-family:var(--font-mono); text-align:right; padding:4px 6px;
+    border:1px solid var(--border-strong); border-radius:5px; background:var(--surface-sunken); color:var(--text);
+  }
+  .input-num:focus-visible{ outline:2px solid var(--accent); }
+
+  .bar-cell{ display:flex; align-items:center; gap:8px; min-width:140px; }
+  .bar-track{ flex:1; height:8px; border-radius:99px; background:var(--surface-sunken); overflow:hidden; }
+  .bar-fill{ height:100%; border-radius:99px; }
+  .bar-fill.good{ background:var(--good); }
+  .bar-fill.warning{ background:var(--warning); }
+  .bar-fill.critical{ background:var(--critical); }
+
+  /* ---------- Cost grid ---------- */
+  .cost-grid{ display:grid; grid-template-columns:1.1fr 1.1fr .8fr; gap:1px; background:var(--border); }
+  .cost-col{ background:var(--surface); padding:16px; }
+  .cost-col h3{ font-size:13px; margin-bottom:10px; }
+  .stat{ display:flex; flex-direction:column; gap:2px; padding:10px 0; border-bottom:1px solid var(--border); }
+  .stat:last-child{ border-bottom:none; }
+  .stat .lbl{ font-size:11.5px; color:var(--muted); }
+  .stat .val{ font-family:var(--font-display); font-size:19px; font-weight:700; }
+  .stat .val.small{ font-size:15px; }
+  .note{ font-size:11px; color:var(--muted); margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); }
+
+  .compare-table td.hl{ background:var(--accent-wash); font-weight:700; }
+
+  footer.page{ text-align:center; color:var(--muted); font-size:11.5px; padding:28px 0 8px; }
+
+  @media (max-width:900px){
+    .kpis{ grid-template-columns:repeat(2,1fr); }
+    .cost-grid{ grid-template-columns:1fr; }
+    .site-detail{ grid-template-columns:1fr; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="mark">WMS</div>
+      <div>
+        <h1>Torre de Control — Implementación WMS</h1>
+        <div class="sub">15 sites · México &amp; Colombia · plan general, por site, recursos y costos</div>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn" id="btnBase">Cargar Escenario Base</button>
+      <button class="btn primary" id="btnOptimo">Cargar Escenario Óptimo</button>
+    </div>
+  </header>
+
+  <!-- CONTROLS -->
+  <div class="panel">
+    <div class="controls">
+      <div class="ctl-group">
+        <span class="lbl">Deployment Maturity</span>
+        <div class="segmented" id="ctlMaturity">
+          <button data-v="A">A</button><button data-v="B">B</button>
+        </div>
+      </div>
+      <div class="ctl-group">
+        <span class="lbl">Sites en paralelo</span>
+        <div class="slider-ctl">
+          <input type="range" id="ctlParallel" min="1" max="15" value="3">
+          <span class="slider-readout num" id="parallelReadout">3</span>
+        </div>
+      </div>
+      <div class="ctl-group">
+        <span class="lbl">Fuente de recursos</span>
+        <div class="segmented" id="ctlSource">
+          <button data-v="actual">Actual</button><button data-v="esc1">Escenario 1</button>
+        </div>
+      </div>
+      <div class="ctl-group">
+        <span class="lbl">Etiquetado</span>
+        <div class="segmented" id="ctlLabel">
+          <button data-v="printers">Impresoras</button><button data-v="manual">Manual</button>
+        </div>
+      </div>
+      <div class="ctl-group">
+        <span class="lbl">WiFi</span>
+        <div class="segmented" id="ctlWifi">
+          <button data-v="full">Full</button><button data-v="opt">Optimizado</button><button data-v="prior">Priorizado</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="panel">
+    <div class="kpis" id="kpiRow"></div>
+  </div>
+
+  <!-- SECTION 1: Program-wide Gantt -->
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Plan general del programa</h2>
+      <div class="hint">Inicio a fin de los 15 sites según el escenario actual. La línea punteada marca el límite de 8 meses.</div>
+    </div>
+    <div class="panel-body">
+      <div class="gantt-scroll">
+        <div class="gantt" id="mainGantt"></div>
+      </div>
+      <div class="gantt-legend">
+        <span><span class="sw" style="background:var(--accent)"></span>Fase activa</span>
+        <span><span style="display:inline-block;width:12px;border-top:2px dashed var(--critical);margin-right:5px;vertical-align:middle;"></span>Límite objetivo (8 meses)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: Per-site plan -->
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Plan de trabajo por site</h2>
+      <div class="hint">Selecciona un site para ver su cronograma de fases, costo y demanda de recursos.</div>
+    </div>
+    <div class="site-picker" id="sitePicker"></div>
+    <div class="site-detail">
+      <div class="site-info">
+        <h3 id="siteTitle">Site 01</h3>
+        <dl id="siteInfoList"></dl>
+        <div class="site-cost-list" id="siteCostList"></div>
+      </div>
+      <div>
+        <div class="gantt-scroll"><div class="gantt" id="siteGantt"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: Resources -->
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Uso de recursos</h2>
+      <div class="hint">Editable — cambia "Disponible" por rol y observa la utilización. Semáforo: ≤80% verde, ≤100% ámbar, &gt;100% rojo.</div>
+      <button class="btn" id="btnAutoAdjust">Ajustar automáticamente al mínimo sin sobrecarga</button>
+    </div>
+    <div class="panel-body">
+      <div class="table-scroll">
+        <table id="resourceTable">
+          <thead>
+            <tr><th>Rol</th><th class="num">Disponible</th><th class="num">Requerido (pico)</th><th>Utilización</th><th>Semáforo</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div style="margin-top:18px;">
+        <h3 style="font-size:12.5px; color:var(--text-2); margin-bottom:8px;">Recurso-semanas totales por site (general del programa)</h3>
+        <div class="table-scroll">
+          <table id="siteResourceTable">
+            <thead><tr><th>Site</th><th class="num">Recurso-semanas</th><th style="width:35%;"></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 4: Costs -->
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Resumen de costos</h2>
+      <div class="hint">Costos de sites en USD (Financials) y de recursos en MXN (Resource Master) — se muestran por separado, el archivo original no trae tipo de cambio.</div>
+    </div>
+    <div class="cost-grid">
+      <div class="cost-col">
+        <h3>Por site (USD)</h3>
+        <div class="table-scroll"><table id="siteCostTable"><thead><tr><th>Site</th><th class="num">Costo</th><th style="width:30%"></th></tr></thead><tbody></tbody></table></div>
+      </div>
+      <div class="cost-col">
+        <h3>Por tipo de recurso (MXN)</h3>
+        <div class="table-scroll"><table id="roleCostTable"><thead><tr><th>Rol</th><th class="num">Costo</th><th style="width:26%"></th></tr></thead><tbody></tbody></table></div>
+      </div>
+      <div class="cost-col">
+        <h3>Totales del escenario</h3>
+        <div id="totalsBlock"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 5: Scenario comparison -->
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Costos por escenario</h2>
+      <div class="hint">Comparación entre el escenario base, el óptimo encontrado y tu configuración actual.</div>
+    </div>
+    <div class="panel-body">
+      <div class="table-scroll">
+        <table class="compare-table" id="compareTable">
+          <thead><tr><th>Escenario</th><th class="num">Duración</th><th>Cumple 8m</th><th class="num">Costo impl. (USD)</th><th class="num">Costo recursos (MXN)</th><th class="num">Payback (meses)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer class="page">Simulador WMS — datos de Sites Master, Financials (USD), Resource Master, Implementation Phases y Phase-Resource Allocation.</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ======================= DATA (from the WMS simulator source file) ======================= */
+const SITES = [
+ {id:'Site 01', country:'México', cluster:2},
+ {id:'Site 02', country:'México', cluster:2},
+ {id:'Site 03', country:'México', cluster:2},
+ {id:'Site 04', country:'México', cluster:2},
+ {id:'Site 05', country:'México', cluster:3},
+ {id:'Site 06', country:'México', cluster:1},
+ {id:'Site 07', country:'México', cluster:2},
+ {id:'Site 08', country:'Colombia', cluster:1},
+ {id:'Site 09', country:'Colombia', cluster:2},
+ {id:'Site 10', country:'Colombia', cluster:1},
+ {id:'Site 11', country:'Colombia', cluster:3},
+ {id:'Site 12', country:'Colombia', cluster:4},
+ {id:'Site 13', country:'Colombia', cluster:1},
+ {id:'Site 14', country:'Colombia', cluster:1},
+ {id:'Site 15', country:'Colombia', cluster:2},
+];
+
+const PHASES = ['Site Readiness','Design Adaptation','Functional Review','UAT','Training','DIALT','Go Live','Hypercare'];
+
+const DURATIONS = {
+  1:{ A:[5,2,1,2,3,1,1,4], B:[4,1,1,1,2,1,1,4] },
+  2:{ A:[4,1,1,2,2,1,1,4], B:[4,1,1,1,2,1,1,4] },
+  3:{ A:[4,1,1,1,2,1,1,4], B:[4,1,1,1,2,1,1,4] },
+  4:{ A:[2,0,1,1,1,1,1,3], B:[2,0,1,1,1,1,1,3] },
+};
+
+const ALLOC_PATTERN = [
+ ['Site Readiness','Infrastructure Lead',1],['Site Readiness','SAP Integrations Lead',0.5],
+ ['Design Adaptation','Solution Architect',1],['Design Adaptation','SAP Integrations Lead',0.5],
+ ['Design Adaptation','SAP Integrations Specialist',0.5],['Design Adaptation','Azure Lead',0.5],
+ ['Design Adaptation','Azure Specialist',0.5],['Design Adaptation','Testing Lead',1],
+ ['Design Adaptation','Functional Lead',1],['Design Adaptation','Trainers',1],
+ ['Design Adaptation','Infrastructure Lead',1],['Design Adaptation','Functional Lead Vendor A',1],
+ ['Functional Review','Solution Architect',0.5],['Functional Review','Change Management Lead',1],
+ ['Functional Review','SAP Integrations Lead',0.5],['Functional Review','SAP Integrations Specialist',0.5],
+ ['Functional Review','Azure Lead',0.5],['Functional Review','Azure Specialist',0.5],
+ ['Functional Review','Testing Lead',0.5],['Functional Review','Functional Lead',1],
+ ['Functional Review','Trainers',1],
+ ['UAT','Solution Architect',0.5],['UAT','Change Management Lead',1],['UAT','SAP Integrations Lead',0.5],
+ ['UAT','SAP Integrations Specialist',0.5],['UAT','Azure Lead',0.5],['UAT','Azure Specialist',0.5],
+ ['UAT','Testing Lead',0.5],['UAT','Functional Lead',1],['UAT','Trainers',1],
+ ['Training','Change Management Lead',1],['Training','Trainers',1],
+ ['DIALT','Solution Architect',0.5],['DIALT','Change Management Lead',1],['DIALT','Azure Lead',0.75],
+ ['DIALT','Azure Specialist',0.75],['DIALT','Functional Lead',1],['DIALT','Trainers',1],
+ ['DIALT','Functional Lead Vendor A',1],
+ ['Go Live','Solution Architect',1],['Go Live','Change Management Lead',1],['Go Live','SAP Integrations Lead',1],
+ ['Go Live','SAP Integrations Specialist',1],['Go Live','Azure Lead',1],['Go Live','Azure Specialist',1],
+ ['Go Live','Functional Lead',1],['Go Live','Trainers',1],['Go Live','Infrastructure Lead',1],
+ ['Go Live','Functional Lead Vendor A',1],
+ ['Hypercare','Solution Architect',0.5],['Hypercare','Change Management Lead',1],['Hypercare','SAP Integrations Lead',0.5],
+ ['Hypercare','SAP Integrations Specialist',0.5],['Hypercare','Azure Lead',0.5],['Hypercare','Azure Specialist',0.5],
+ ['Hypercare','Functional Lead',1],['Hypercare','Functional Lead',1],['Hypercare','Trainers',1],
+ ['Hypercare','Trainers',1],['Hypercare','Trainers',1],['Hypercare','Infrastructure Lead',1],
+ ['Hypercare','Functional Lead Vendor A',0.5],
+].map(([phase,role,c])=>({phase,role,c}));
+
+const ROLES = [
+ {name:'Solution Architect', cost:36000, actual:1, esc1:5},
+ {name:'Warehouse Manager Org A', cost:35000, actual:1, esc1:5},
+ {name:'Project Manager Country B', cost:25000, actual:1, esc1:5},
+ {name:'Project Manager Country A', cost:25000, actual:1, esc1:5},
+ {name:'Change Management Lead', cost:16000, actual:2, esc1:10},
+ {name:'Infrastructure Lead', cost:42500, actual:2, esc1:10},
+ {name:'Functional Lead', cost:35000, actual:2, esc1:10},
+ {name:'SAP Integrations Lead', cost:62000, actual:1, esc1:5},
+ {name:'SAP Integrations Specialist', cost:55000, actual:1, esc1:5},
+ {name:'Azure Lead', cost:48000, actual:1, esc1:5},
+ {name:'Azure Specialist', cost:45000, actual:1, esc1:5},
+ {name:'Testing Lead', cost:35000, actual:1, esc1:5},
+ {name:'Trainers', cost:28000, actual:1, esc1:5},
+ {name:'Functional Lead Vendor A', cost:36000, actual:2, esc1:10},
+ {name:'Support Lead', cost:22000, actual:2, esc1:10},
+];
+
+const FIN = {
+ 'Site 01': {benefits:18511, base:47464.3204, printers:7144.76, manual:0, full:44451, opt:43451, prior:0},
+ 'Site 02': {benefits:26878, base:143424.8151, printers:81930.072, manual:142702.7027, full:287249, opt:220687, prior:110343.5},
+ 'Site 03': {benefits:61087, base:162848.3568, printers:212307.9, manual:259459.4595, full:378909, opt:157740, prior:112671.4286},
+ 'Site 04': {benefits:70898, base:206112.706, printers:184000.18, manual:220540.5405, full:411279, opt:368914, prior:230571.25},
+ 'Site 05': {benefits:14809, base:43142.561, printers:73600.072, manual:103783.7838, full:219880, opt:206497, prior:77436.375},
+ 'Site 06': {benefits:76636, base:369764.5588, printers:302730.288, manual:376216.2162, full:523835, opt:297466, prior:220345.1852},
+ 'Site 07': {benefits:30543, base:189431.2487, printers:147200.144, manual:181621.6216, full:277152, opt:123137, prior:94720.7692},
+ 'Site 08': {benefits:70420, base:50000, printers:0, manual:0, full:0, opt:0, prior:0},
+ 'Site 09': {benefits:15920, base:34747, printers:0, manual:0, full:133781, opt:115803, prior:100862},
+ 'Site 10': {benefits:90320, base:106583, printers:308459.6755, manual:0, full:487872, opt:364795, prior:154945.835},
+ 'Site 11': {benefits:24480, base:40333, printers:176263, manual:0, full:180753, opt:185549, prior:94573.8118},
+ 'Site 12': {benefits:10180, base:11986, printers:88131, manual:0, full:116598, opt:73392, prior:43642.3158},
+ 'Site 13': {benefits:109140, base:557721, printers:1189773, manual:0, full:333663, opt:267903, prior:136549.4177},
+ 'Site 14': {benefits:56820, base:121140, printers:925379, manual:0, full:319639, opt:286043, prior:121496.1046},
+ 'Site 15': {benefits:27560, base:44271, printers:88131, manual:0, full:139767, opt:134417, prior:79930.635},
+};
+
+const TARGET_MONTHS = 8;
+const TARGET_DAYS = TARGET_MONTHS * 30.44;
+const WEEKS_PER_MONTH = 4.345;
+
+/* ======================= ENGINE ======================= */
+function clusterTotalWeeks(cluster, maturity){ return DURATIONS[cluster][maturity].reduce((a,b)=>a+b,0); }
+
+function computeSchedule(maturity, maxParallel){
+  const order = SITES.map(s=>s.id); // priority = default numeric order
+  const start = {}, end = {};
+  order.forEach((id, idx)=>{
+    const rank = idx+1;
+    const site = SITES.find(s=>s.id===id);
+    const totalW = clusterTotalWeeks(site.cluster, maturity);
+    if (rank <= maxParallel) start[id] = 0;
+    else {
+      const feeder = order[rank-maxParallel-1];
+      start[id] = end[feeder] + 1;
+    }
+    end[id] = start[id] + totalW*7 - 1;
+  });
+  const phaseRows = [];
+  SITES.forEach(s=>{
+    const durs = DURATIONS[s.cluster][maturity];
+    let cursor = start[s.id];
+    durs.forEach((d,i)=>{
+      const ps = cursor;
+      const pe = d===0 ? ps : ps + d*7 - 1;
+      phaseRows.push({site:s.id, cluster:s.cluster, phase:PHASES[i], seq:i+1, duration:d, startDay:ps, endDay:pe});
+      cursor = pe + 1;
+    });
+  });
+  const programEndDay = Math.max(...Object.values(end));
+  return { start, end, phaseRows, totalDays: programEndDay+1, totalWeeks: Math.round((programEndDay+1)/7) };
+}
+
+function buildDetail(phaseRows){
+  const rows = [];
+  phaseRows.forEach(pr=>{
+    if (pr.cluster===4) return;
+    const startWeek = Math.floor(pr.startDay/7)+1;
+    const endWeek = Math.floor(pr.endDay/7)+1;
+    ALLOC_PATTERN.filter(a=>a.phase===pr.phase).forEach(a=>{
+      rows.push({site:pr.site, role:a.role, c:a.c, startWeek, endWeek});
+    });
+  });
+  return rows;
+}
+
+function peakByRole(detail, maxWeek){
+  const peak = {}; ROLES.forEach(r=>peak[r.name]=0);
+  for (let w=1; w<=maxWeek; w++){
+    const req = {}; ROLES.forEach(r=>req[r.name]=0);
+    detail.forEach(d=>{ if (d.startWeek<=w && w<=d.endWeek) req[d.role]+=d.c; });
+    ROLES.forEach(r=>{ if (req[r.name]>peak[r.name]) peak[r.name]=req[r.name]; });
+  }
+  return peak;
+}
+
+function resourceWeeksBySite(detail){
+  const bySite = {}; SITES.forEach(s=>bySite[s.id]=0);
+  detail.forEach(d=>{ bySite[d.site]+= d.c*(d.endWeek-d.startWeek+1); });
+  return bySite;
+}
+
+function computeAll(cfg){
+  // cfg: {maturity, maxParallel, source, overrides:{role:num|null}, labeling, wifi}
+  const schedule = computeSchedule(cfg.maturity, cfg.maxParallel);
+  const detail = buildDetail(schedule.phaseRows);
+  const peak = peakByRole(detail, schedule.totalWeeks + 2);
+  const avail = {};
+  ROLES.forEach(r=>{
+    const src = cfg.source==='esc1' ? r.esc1 : r.actual;
+    avail[r.name] = (cfg.overrides && cfg.overrides[r.name]!=null) ? cfg.overrides[r.name] : src;
+  });
+  const util = {};
+  ROLES.forEach(r=> util[r.name] = avail[r.name]>0 ? peak[r.name]/avail[r.name] : (peak[r.name]>0 ? 9.99 : 0));
+  const overloaded = ROLES.filter(r=>util[r.name]>1).length;
+  const durationMonths = schedule.totalWeeks / WEEKS_PER_MONTH;
+  const meets8 = durationMonths <= TARGET_MONTHS;
+
+  const siteCosts = SITES.map(s=>{
+    const f = FIN[s.id];
+    const labelCost = cfg.labeling==='manual' ? f.manual : f.printers;
+    const wifiCost = cfg.wifi==='full'?f.full: cfg.wifi==='opt'?f.opt:f.prior;
+    return { site:s.id, cost:f.base+labelCost+wifiCost, benefits:f.benefits };
+  });
+  const totalImpl = siteCosts.reduce((a,c)=>a+c.cost,0);
+  const totalBenefits = siteCosts.reduce((a,c)=>a+c.benefits,0);
+
+  const roleCosts = ROLES.map(r=>({ role:r.name, avail:avail[r.name], monthly:r.cost, total: avail[r.name]*r.cost*durationMonths }));
+  const totalResourceCost = roleCosts.reduce((a,r)=>a+r.total,0);
+  const payback = totalBenefits>0 ? totalImpl/totalBenefits : NaN;
+
+  const siteRW = resourceWeeksBySite(detail);
+
+  return { schedule, detail, peak, avail, util, overloaded, durationMonths, meets8,
+           siteCosts, totalImpl, totalBenefits, roleCosts, totalResourceCost, payback, siteRW };
+}
+
+/* ======================= STATE ======================= */
+const state = {
+  maturity:'A', maxParallel:3, source:'actual', overrides:{}, labeling:'printers', wifi:'full',
+  selectedSite:'Site 01'
+};
+
+const BASE_CFG = { maturity:'A', maxParallel:3, source:'actual', overrides:{}, labeling:'printers', wifi:'full' };
+const RESULT_BASE = computeAll(BASE_CFG);
+const OPTIMO_OVERRIDES = (()=>{
+  const cfg = { maturity:'A', maxParallel:15, source:'actual', overrides:{}, labeling:'manual', wifi:'prior' };
+  const r = computeAll(cfg);
+  return r.peak; // minimal feasible headcount = peak requirement
+})();
+const OPTIMO_CFG = { maturity:'A', maxParallel:15, source:'actual', overrides:OPTIMO_OVERRIDES, labeling:'manual', wifi:'prior' };
+const RESULT_OPTIMO = computeAll(OPTIMO_CFG);
+
+/* ======================= FORMAT HELPERS ======================= */
+const fmtUSD = n => '$' + Math.round(n).toLocaleString('en-US') + ' USD';
+const fmtMXN = n => '$' + Math.round(n).toLocaleString('en-US') + ' MXN';
+const fmtPct = n => (n*100).toFixed(0) + '%';
+const statusOf = u => u>1?'critical':(u>0.8?'warning':'good');
+
+/* ======================= RENDER ======================= */
+function render(){
+  const cfg = { maturity:state.maturity, maxParallel:state.maxParallel, source:state.source,
+                overrides:state.overrides, labeling:state.labeling, wifi:state.wifi };
+  const R = computeAll(cfg);
+
+  // controls active state
+  setSeg('ctlMaturity', state.maturity);
+  setSeg('ctlSource', state.source);
+  setSeg('ctlLabel', state.labeling);
+  setSeg('ctlWifi', state.wifi);
+  document.getElementById('ctlParallel').value = state.maxParallel;
+  document.getElementById('parallelReadout').textContent = state.maxParallel;
+
+  renderKPIs(R);
+  renderMainGantt(R);
+  renderSitePicker();
+  renderSiteDetail(R);
+  renderResourceTable(R);
+  renderSiteResourceTable(R);
+  renderCosts(R);
+  renderCompare(R);
+}
+
+function setSeg(id, val){
+  document.querySelectorAll('#'+id+' button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.v===val);
+  });
+}
+
+function renderKPIs(R){
+  const items = [
+    {lbl:'Duración total', val:R.schedule.totalWeeks+' sem', sub:R.durationMonths.toFixed(1)+' meses'},
+    {lbl:'Objetivo', val:'8 meses', sub:'límite del programa'},
+    {lbl:'Cumple objetivo', pill:R.meets8?'good':'critical', pillTxt:R.meets8?'CUMPLE':'NO CUMPLE'},
+    {lbl:'Costo implementación', val:fmtUSD(R.totalImpl), sub:'USD, 15 sites'},
+    {lbl:'Costo recursos', val:fmtMXN(R.totalResourceCost), sub:'MXN, '+ROLES.length+' roles'},
+    {lbl:'Payback', val: isFinite(R.payback)? R.payback.toFixed(1)+' m' : '—', sub:'meses'},
+    {lbl:'Roles sobrecargados', pill: R.overloaded>0?'critical':'good', pillTxt: R.overloaded+' de '+ROLES.length},
+  ];
+  const el = document.getElementById('kpiRow');
+  el.innerHTML = items.map(it=>{
+    if (it.pill){
+      return `<div class="kpi"><span class="lbl">${it.lbl}</span><span class="pill ${it.pill}"><span class="dot"></span>${it.pillTxt}</span></div>`;
+    }
+    return `<div class="kpi"><span class="lbl">${it.lbl}</span><span class="val num">${it.val}</span><span class="sub">${it.sub}</span></div>`;
+  }).join('');
+}
+
+function ganttMarkup(rows, totalDays, opts){
+  opts = opts || {};
+  const weeksSpan = Math.ceil(totalDays/7);
+  const tickEvery = weeksSpan > 60 ? 8 : (weeksSpan>30?4:2);
+  let axis = '<div class="gantt-axis">';
+  for (let w=0; w<=weeksSpan; w+=tickEvery){
+    const pct = (w*7/totalDays)*100;
+    axis += `<div class="tick" style="left:${pct}%">s${w}</div>`;
+  }
+  axis += '</div>';
+
+  const rowsHtml = rows.map(r=>{
+    const label = opts.byPhase
+      ? `<span>${r.label}</span>`
+      : `<span>${r.label}</span><span class="cluster-tag">C${r.cluster}</span>`;
+    const leftPct = (r.startDay/totalDays)*100;
+    const widthPct = Math.max((r.days/totalDays)*100, 0.6);
+    let track = '<div class="gantt-track">';
+    if (opts.limitDay!=null){
+      track += `<div class="limitline" style="left:${(opts.limitDay/totalDays)*100}%"></div>`;
+    }
+    track += `<div class="gantt-bar" style="left:${leftPct}%; width:${widthPct}%;" title="${r.title}"></div>`;
+    track += '</div>';
+    const activeCls = opts.activeId===r.id ? 'active' : '';
+    return `<div class="gantt-row"><div class="rowlabel ${activeCls}" data-id="${r.id}">${label}</div>${track}</div>`;
+  }).join('');
+
+  return axis + rowsHtml;
+}
+
+function renderMainGantt(R){
+  const rows = SITES.map(s=>({
+    id:s.id, label:s.id, cluster:s.cluster,
+    startDay:R.schedule.start[s.id], days:R.schedule.end[s.id]-R.schedule.start[s.id]+1,
+    title:`${s.id} · ${Math.round((R.schedule.end[s.id]-R.schedule.start[s.id]+1)/7)} semanas`
+  }));
+  const el = document.getElementById('mainGantt');
+  el.innerHTML = ganttMarkup(rows, R.schedule.totalDays, {limitDay:TARGET_DAYS, activeId:state.selectedSite});
+  el.querySelectorAll('.rowlabel').forEach(l=>{
+    l.addEventListener('click', ()=>{ state.selectedSite = l.dataset.id; render(); document.getElementById('siteTitle').scrollIntoView({behavior:'smooth', block:'center'}); });
+  });
+}
+
+function renderSitePicker(){
+  const el = document.getElementById('sitePicker');
+  el.innerHTML = SITES.map(s=>`<button class="chip ${s.id===state.selectedSite?'active':''}" data-id="${s.id}">${s.id}</button>`).join('');
+  el.querySelectorAll('.chip').forEach(c=>{
+    c.addEventListener('click', ()=>{ state.selectedSite = c.dataset.id; render(); });
+  });
+}
+
+function renderSiteDetail(R){
+  const site = SITES.find(s=>s.id===state.selectedSite);
+  document.getElementById('siteTitle').textContent = site.id;
+  const rows = R.schedule.phaseRows.filter(p=>p.site===site.id);
+  const siteStart = R.schedule.start[site.id];
+  document.getElementById('siteInfoList').innerHTML = `
+    <dt>País</dt><dd>${site.country}</dd>
+    <dt>Cluster</dt><dd>${site.cluster}</dd>
+    <dt>Duración</dt><dd class="num">${Math.round((R.schedule.end[site.id]-siteStart+1)/7)} semanas</dd>
+    <dt>Recurso-semanas</dt><dd class="num">${R.siteRW[site.id].toFixed(1)}</dd>
+  `;
+  const f = FIN[site.id];
+  const labelCost = state.labeling==='manual'?f.manual:f.printers;
+  const wifiCost = state.wifi==='full'?f.full:(state.wifi==='opt'?f.opt:f.prior);
+  const total = f.base+labelCost+wifiCost;
+  document.getElementById('siteCostList').innerHTML = `
+    <div class="row"><span>Base (impl./devices/forklift/signage/labels)</span><span class="num">${fmtUSD(f.base)}</span></div>
+    <div class="row"><span>Etiquetado</span><span class="num">${fmtUSD(labelCost)}</span></div>
+    <div class="row"><span>WiFi</span><span class="num">${fmtUSD(wifiCost)}</span></div>
+    <div class="row total"><span>Costo total del site</span><span class="num">${fmtUSD(total)}</span></div>
+    <div class="row"><span>Beneficio mensual</span><span class="num">${fmtUSD(f.benefits)}</span></div>
+  `;
+  const ganttRows = rows.map(p=>({
+    id:p.phase, label:p.phase, days:p.endDay-p.startDay+1,
+    startDay:p.startDay-siteStart, title:`${p.phase} · ${p.duration} sem`
+  }));
+  const localTotalDays = R.schedule.end[site.id]-siteStart+1;
+  document.getElementById('siteGantt').innerHTML = ganttMarkup(ganttRows, localTotalDays, {byPhase:true});
+}
+
+function renderResourceTable(R){
+  const tbody = document.querySelector('#resourceTable tbody');
+  tbody.innerHTML = ROLES.map(r=>{
+    const u = R.util[r.name];
+    const st = statusOf(u);
+    const pctWidth = Math.min(u*100, 130);
+    return `<tr>
+      <td>${r.name}</td>
+      <td class="num"><input class="input-num" type="number" min="0" step="0.5" value="${R.avail[r.name]}" data-role="${r.name}"></td>
+      <td class="num">${R.peak[r.name].toFixed(2)}</td>
+      <td><div class="bar-cell"><div class="bar-track"><div class="bar-fill ${st}" style="width:${pctWidth}%"></div></div><span class="num" style="min-width:38px;">${fmtPct(u)}</span></div></td>
+      <td><span class="pill ${st}"><span class="dot"></span>${st==='good'?'Ok':st==='warning'?'Ajustado':'Sobrecarga'}</span></td>
+    </tr>`;
+  }).join('');
+  tbody.querySelectorAll('input[data-role]').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const v = parseFloat(inp.value);
+      state.overrides[inp.dataset.role] = isNaN(v) ? null : v;
+      render();
+    });
+  });
+}
+
+function renderSiteResourceTable(R){
+  const tbody = document.querySelector('#siteResourceTable tbody');
+  const maxRW = Math.max(...Object.values(R.siteRW), 1);
+  tbody.innerHTML = SITES.map(s=>{
+    const v = R.siteRW[s.id];
+    return `<tr><td>${s.id}</td><td class="num">${v.toFixed(1)}</td>
+      <td><div class="bar-track"><div class="bar-fill good" style="width:${(v/maxRW*100).toFixed(1)}%"></div></div></td></tr>`;
+  }).join('');
+}
+
+function renderCosts(R){
+  const maxSite = Math.max(...R.siteCosts.map(c=>c.cost), 1);
+  document.querySelector('#siteCostTable tbody').innerHTML = R.siteCosts.slice().sort((a,b)=>b.cost-a.cost).map(c=>`
+    <tr><td>${c.site}</td><td class="num">${fmtUSD(c.cost)}</td>
+    <td><div class="bar-track"><div class="bar-fill good" style="width:${(c.cost/maxSite*100).toFixed(1)}%"></div></div></td></tr>
+  `).join('') + `<tr><td style="font-weight:700;">Total</td><td class="num" style="font-weight:700;">${fmtUSD(R.totalImpl)}</td><td></td></tr>`;
+
+  const maxRole = Math.max(...R.roleCosts.map(c=>c.total), 1);
+  document.querySelector('#roleCostTable tbody').innerHTML = R.roleCosts.slice().sort((a,b)=>b.total-a.total).map(c=>`
+    <tr><td>${c.role}</td><td class="num">${fmtMXN(c.total)}</td>
+    <td><div class="bar-track"><div class="bar-fill" style="background:var(--accent); width:${(c.total/maxRole*100).toFixed(1)}%"></div></div></td></tr>
+  `).join('') + `<tr><td style="font-weight:700;">Total</td><td class="num" style="font-weight:700;">${fmtMXN(R.totalResourceCost)}</td><td></td></tr>`;
+
+  document.getElementById('totalsBlock').innerHTML = `
+    <div class="stat"><span class="lbl">Costo implementación (USD)</span><span class="val num">${fmtUSD(R.totalImpl)}</span></div>
+    <div class="stat"><span class="lbl">Costo recursos (MXN)</span><span class="val num">${fmtMXN(R.totalResourceCost)}</span></div>
+    <div class="stat"><span class="lbl">Beneficio mensual (USD)</span><span class="val small num">${fmtUSD(R.totalBenefits)}</span></div>
+    <div class="stat"><span class="lbl">Payback</span><span class="val small num">${isFinite(R.payback)?R.payback.toFixed(1)+' meses':'—'}</span></div>
+    <div class="note">USD y MXN no se combinan: el archivo original no incluye un tipo de cambio, así que sumarlos requeriría inventar un dato.</div>
+  `;
+}
+
+function renderCompare(R){
+  const rows = [
+    {name:'Escenario Base', r:RESULT_BASE, cur:false},
+    {name:'Escenario Óptimo', r:RESULT_OPTIMO, cur:false},
+    {name:'Tu configuración actual', r:R, cur:true},
+  ];
+  document.querySelector('#compareTable tbody').innerHTML = rows.map(row=>`
+    <tr>
+      <td ${row.cur?'class="hl"':''}>${row.name}</td>
+      <td class="num ${row.cur?'hl':''}">${row.r.schedule.totalWeeks} sem</td>
+      <td class="${row.cur?'hl':''}"><span class="pill ${row.r.meets8?'good':'critical'}"><span class="dot"></span>${row.r.meets8?'Sí':'No'}</span></td>
+      <td class="num ${row.cur?'hl':''}">${fmtUSD(row.r.totalImpl)}</td>
+      <td class="num ${row.cur?'hl':''}">${fmtMXN(row.r.totalResourceCost)}</td>
+      <td class="num ${row.cur?'hl':''}">${isFinite(row.r.payback)?row.r.payback.toFixed(1):'—'}</td>
+    </tr>
+  `).join('');
+}
+
+/* ======================= WIRE UP CONTROLS ======================= */
+document.getElementById('ctlMaturity').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.maturity = b.dataset.v; render();
+});
+document.getElementById('ctlSource').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.source = b.dataset.v; state.overrides = {}; render();
+});
+document.getElementById('ctlLabel').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.labeling = b.dataset.v; render();
+});
+document.getElementById('ctlWifi').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.wifi = b.dataset.v; render();
+});
+document.getElementById('ctlParallel').addEventListener('input', e=>{
+  state.maxParallel = parseInt(e.target.value,10); render();
+});
+document.getElementById('btnAutoAdjust').addEventListener('click', ()=>{
+  const cfg = { maturity:state.maturity, maxParallel:state.maxParallel, source:state.source, overrides:{}, labeling:state.labeling, wifi:state.wifi };
+  const r = computeAll(cfg);
+  state.overrides = Object.assign({}, r.peak);
+  render();
+});
+document.getElementById('btnBase').addEventListener('click', ()=>{
+  state.maturity='A'; state.maxParallel=3; state.source='actual'; state.overrides={}; state.labeling='printers'; state.wifi='full';
+  render();
+});
+document.getElementById('btnOptimo').addEventListener('click', ()=>{
+  state.maturity='A'; state.maxParallel=15; state.source='actual'; state.overrides=Object.assign({},OPTIMO_OVERRIDES);
+  state.labeling='manual'; state.wifi='prior';
+  render();
+});
+
+render();
+})();
+</script>
