@@ -598,11 +598,6 @@ function computeAll(cfg){
 }
 
 /* ======================= STATE ======================= */
-const state = {
-  maturity:'A', maxParallel:3, source:'actual', overrides:{}, labeling:'printers', wifi:'full',
-  selectedSite:'Site 01'
-};
-
 const BASE_CFG = { maturity:'A', maxParallel:3, source:'actual', overrides:{}, labeling:'printers', wifi:'full' };
 const RESULT_BASE = computeAll(BASE_CFG);
 const OPTIMO_OVERRIDES = (()=>{
@@ -612,6 +607,12 @@ const OPTIMO_OVERRIDES = (()=>{
 })();
 const OPTIMO_CFG = { maturity:'A', maxParallel:15, source:'actual', overrides:OPTIMO_OVERRIDES, labeling:'manual', wifi:'prior' };
 const RESULT_OPTIMO = computeAll(OPTIMO_CFG);
+
+// El escenario que carga por defecto es el Optimo (el unico que cumple <=8 meses)
+const state = {
+  maturity:'A', maxParallel:15, source:'actual', overrides:Object.assign({}, OPTIMO_OVERRIDES),
+  labeling:'manual', wifi:'prior', selectedSite:'Site 01'
+};
 
 /* ======================= FORMAT HELPERS ======================= */
 const fmtUSD = n => '$' + Math.round(n).toLocaleString('en-US') + ' USD';
