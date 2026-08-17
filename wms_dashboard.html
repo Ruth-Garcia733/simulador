@@ -383,13 +383,18 @@
   <!-- SECTION 5: Scenario comparison -->
   <div class="panel">
     <div class="panel-head">
-      <h2>Costos por escenario</h2>
-      <div class="hint">Comparación entre el escenario base, el óptimo encontrado y tu configuración actual.</div>
+      <h2>Guardar y comparar escenarios</h2>
+      <div class="hint">Guarda tu configuración actual con un nombre (queda almacenada en este navegador) y compárala contra el Base, el Óptimo y tus otros escenarios guardados.</div>
     </div>
     <div class="panel-body">
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+        <input type="text" id="scenarioName" class="input-num" style="width:220px; text-align:left;" placeholder="Nombre del escenario a guardar">
+        <button class="btn primary" id="btnSaveScenario">Guardar escenario actual</button>
+        <span id="saveMsg" style="font-size:12px; color:var(--text-2);"></span>
+      </div>
       <div class="table-scroll">
         <table class="compare-table" id="compareTable">
-          <thead><tr><th>Escenario</th><th class="num">Duración</th><th>Cumple 8m</th><th class="num">Costo impl. (USD)</th><th class="num">Costo recursos (MXN)</th><th class="num">Payback (meses)</th></tr></thead>
+          <thead><tr><th>Escenario</th><th class="num">Duración</th><th>Cumple 8m</th><th class="num">Costo impl. (USD)</th><th class="num">Costo recursos (MXN)</th><th class="num">Payback (meses)</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -805,12 +810,44 @@ function renderCosts(R){
   `;
 }
 
+/* ---- Guardar/cargar/borrar escenarios con nombre (persistente en este navegador) ---- */
+const SAVE_KEY = 'wms_saved_scenarios_v1';
+function loadSavedScenarios(){
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || []; } catch(e){ return []; }
+}
+function persistSavedScenarios(list){
+  localStorage.setItem(SAVE_KEY, JSON.stringify(list));
+}
+function saveCurrentScenario(name){
+  const cfg = { maturity:state.maturity, maxParallel:state.maxParallel, source:state.source,
+                overrides:state.overrides, labeling:state.labeling, wifi:state.wifi };
+  const list = loadSavedScenarios();
+  list.push({ name, cfg, savedAt: new Date().toISOString() });
+  persistSavedScenarios(list);
+}
+function deleteSavedScenario(idx){
+  const list = loadSavedScenarios();
+  list.splice(idx,1);
+  persistSavedScenarios(list);
+  render();
+}
+function loadSavedScenario(idx){
+  const list = loadSavedScenarios();
+  const s = list[idx]; if(!s) return;
+  state.maturity = s.cfg.maturity; state.maxParallel = s.cfg.maxParallel; state.source = s.cfg.source;
+  state.overrides = Object.assign({}, s.cfg.overrides); state.labeling = s.cfg.labeling; state.wifi = s.cfg.wifi;
+  render();
+}
+
 function renderCompare(R){
-  const rows = [
-    {name:'Escenario Base', r:RESULT_BASE, cur:false},
-    {name:'Escenario Óptimo', r:RESULT_OPTIMO, cur:false},
-    {name:'Tu configuración actual', r:R, cur:true},
+  const fixedRows = [
+    {name:'Escenario Base', r:RESULT_BASE, cur:false, fixed:true},
+    {name:'Escenario Óptimo', r:RESULT_OPTIMO, cur:false, fixed:true},
+    {name:'Tu configuración actual', r:R, cur:true, fixed:true},
   ];
+  const saved = loadSavedScenarios();
+  const savedRows = saved.map((s,idx)=>({ name:s.name, r:computeAll(s.cfg), cur:false, fixed:false, idx }));
+  const rows = fixedRows.concat(savedRows);
   document.querySelector('#compareTable tbody').innerHTML = rows.map(row=>`
     <tr>
       <td ${row.cur?'class="hl"':''}>${row.name}</td>
@@ -819,8 +856,11 @@ function renderCompare(R){
       <td class="num ${row.cur?'hl':''}">${fmtUSD(row.r.totalImpl)}</td>
       <td class="num ${row.cur?'hl':''}">${fmtMXN(row.r.totalResourceCost)}</td>
       <td class="num ${row.cur?'hl':''}">${isFinite(row.r.payback)?row.r.payback.toFixed(1):'—'}</td>
+      <td>${row.fixed?'':'<button class="btn" data-load="'+row.idx+'" style="margin-right:4px;">Cargar</button><button class="btn" data-del="'+row.idx+'">Eliminar</button>'}</td>
     </tr>
   `).join('');
+  document.querySelectorAll('#compareTable [data-load]').forEach(b=>b.addEventListener('click', ()=>loadSavedScenario(parseInt(b.dataset.load,10))));
+  document.querySelectorAll('#compareTable [data-del]').forEach(b=>b.addEventListener('click', ()=>deleteSavedScenario(parseInt(b.dataset.del,10))));
 }
 
 /* ======================= WIRE UP CONTROLS ======================= */
@@ -856,6 +896,16 @@ document.getElementById('btnBase').addEventListener('click', ()=>{
 document.getElementById('btnOptimo').addEventListener('click', ()=>{
   state.maturity='A'; state.maxParallel=15; state.source='actual'; state.overrides=Object.assign({},OPTIMO_OVERRIDES);
   state.labeling='manual'; state.wifi='prior';
+  render();
+});
+document.getElementById('btnSaveScenario').addEventListener('click', ()=>{
+  const input = document.getElementById('scenarioName');
+  const name = input.value.trim();
+  const msg = document.getElementById('saveMsg');
+  if (!name){ msg.textContent = 'Escribe un nombre primero.'; msg.style.color='var(--critical)'; return; }
+  saveCurrentScenario(name);
+  input.value = '';
+  msg.textContent = 'Guardado: "'+name+'"'; msg.style.color='var(--good)';
   render();
 });
 
